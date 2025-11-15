@@ -23,7 +23,7 @@ except ImportError:
 def text_to_mp3(
     text: str,
     output_path: str,
-    voice_id: str = "21m00Tcm4TlvDq8ikWAM",  # Default voice: Rachel
+    voice_id: str = "3liN8q8YoeB9Hk6AboKe",  # Default voice: Rachel
     model_id: str = "eleven_multilingual_v2",
     api_key: Optional[str] = None,
 ) -> str:
