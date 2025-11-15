@@ -22,11 +22,19 @@ class ExternalOrderServicesClient(
     private val logger = LoggerFactory.getLogger(ExternalOrderServicesClient::class.java)
 
     fun getItemsToReplace(order: ProductDto): PredictOrderResponse {
-        return restTemplate.postForObject(
-            externalServicesProperties.predictOrderUrl,
-            order,
-            PredictOrderResponse::class.java
-        ) ?: PredictOrderResponse(emptyList())
+        return try {
+            restTemplate.postForObject(
+                externalServicesProperties.predictOrderUrl,
+                order,
+                PredictOrderResponse::class.java
+            ) ?: PredictOrderResponse(emptyList())
+        } catch (ex: RestClientException) {
+            logger.warn(
+                "Predict service unavailable ({}). Defaulting to empty replacements.",
+                ex.message
+            )
+            PredictOrderResponse(emptyList())
+        }
     }
 
     fun getSubstitutionsForItem(
@@ -36,11 +44,20 @@ class ExternalOrderServicesClient(
     ): SubstitutionResponse {
         val request = SubstitutionRequest(lineId, productCode, qty)
 
-        return restTemplate.postForObject(
-            externalServicesProperties.substitutionSuggestUrl,
-            request,
-            SubstitutionResponse::class.java
-        ) ?: SubstitutionResponse(lineId, emptyList())
+        return try {
+            restTemplate.postForObject(
+                externalServicesProperties.substitutionSuggestUrl,
+                request,
+                SubstitutionResponse::class.java
+            ) ?: SubstitutionResponse(lineId, emptyList())
+        } catch (ex: RestClientException) {
+            logger.warn(
+                "Substitution service unavailable ({}). Defaulting to empty suggestions for line {}.",
+                ex.message,
+                lineId
+            )
+            SubstitutionResponse(lineId, emptyList())
+        }
     }
 
     fun getShortageDecisions(request: ShortageProactiveRequest): ShortageProactiveResponse {

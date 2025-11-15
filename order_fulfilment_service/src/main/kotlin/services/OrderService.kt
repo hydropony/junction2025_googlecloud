@@ -12,6 +12,7 @@ import org.example.dto.ShortageProactiveRequest
 import org.example.dto.WarehouseItem
 import org.example.repositories.OrderRepository
 import org.example.repositories.WarehouseItemRepository
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -21,12 +22,25 @@ class OrderService(
     private val warehouseItemRepository: WarehouseItemRepository,
     private val orderRepository: OrderRepository
 ) {
+    private val logger = LoggerFactory.getLogger(OrderService::class.java)
 
     @Transactional
     fun saveOrder(order: ProductDto) {
+        logger.info(
+            "Processing order {} with {} items (customerId={})",
+            order.orderId,
+            order.items.size,
+            order.customerId
+        )
+
         // 1. /predict/order — id позиций, которые стоит рассмотреть на замену
         val predictResponse = externalClient.getItemsToReplace(order)
         val lineIdsToReplace: Set<Int> = predictResponse.lineIds.toSet()
+        logger.info(
+            "Predict service returned {} lineIds: {}",
+            lineIdsToReplace.size,
+            lineIdsToReplace
+        )
 
         // 2. Для каждого такого id берём список id-замен из /substitution/suggest
         val substitutionsMap: MutableMap<Int, List<Int>> = mutableMapOf()
@@ -40,9 +54,15 @@ class OrderService(
             )
 
             substitutionsMap[lineId] = substitutionResponse.suggestedLineIds
+            logger.info(
+                "Substitution service suggestions for line {} -> {}",
+                lineId,
+                substitutionResponse.suggestedLineIds
+            )
         }
 
         val warehouseItemsById = loadReplacementItems(substitutionsMap)
+        logger.info("Loaded {} replacement items from warehouse cache/DB", warehouseItemsById.size)
 
         val shortageRequestItems = buildShortageRequestItems(order, substitutionsMap)
 
@@ -52,6 +72,10 @@ class OrderService(
         )
         val decisionsByLineId: Map<Int, ShortageDecision> =
             shortageResponse.decisions.associateBy { it.lineId }
+        logger.info(
+            "Shortage service decisions: {}",
+            decisionsByLineId.mapValues { it.value.action }
+        )
 
         // 4. Собираем финальный список items, подтягивая замену из склада по id
         val finalItems: List<OrderItemDto> = order.items.mapNotNull { item ->
@@ -82,9 +106,15 @@ class OrderService(
                                 qty = newQty
                             )
                         } else {
+                            logger.warn(
+                                "Replacement {} requested for line {} but not found. Keeping original item.",
+                                replacementId,
+                                item.lineId
+                            )
                             item
                         }
                     } else {
+                        logger.info("No replacement ID for line {}, keeping original item", item.lineId)
                         item
                     }
                 }
@@ -96,6 +126,11 @@ class OrderService(
         // 5. Маппим в сущности и сохраняем только в БД
         val entity = mapToEntity(finalOrder, finalItems)
         orderRepository.save(entity)
+        logger.info(
+            "Order {} persisted with {} final items",
+            order.orderId,
+            finalItems.size
+        )
     }
 
     private fun mapToEntity(order: ProductDto, finalItems: List<OrderItemDto>): OrderEntity {

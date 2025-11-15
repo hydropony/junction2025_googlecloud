@@ -1,82 +1,27 @@
 version: "3.9"
 
 services:
-  warehouse-postgres:
-    image: postgres:16
-    container_name: warehouse-postgres
-    environment:
-      POSTGRES_DB: warehouse
-      POSTGRES_USER: warehouse_user
-      POSTGRES_PASSWORD: warehouse_pass
-    ports:
-      - "6000:5432"
-    volumes:
-      - ./warehouse-db/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-      - warehouse-db-pgdata:/var/lib/postgresql/data
-    networks:
-      - junction-net
-
-  order-fulfilment-service:
+  junction-stack:
     build:
-      context: ./order_fulfilment_service
-    container_name: order-fulfilment-service
-    depends_on:
-      - warehouse-postgres
-      - substitution-service
-      - stock-prediction-service
+      context: .
+    container_name: junction-stack
     ports:
-      - "8080:8080"
+      - "8080:8080" # order fulfilment API
+      - "8000:8000" # substitution API
+      - "8100:8100" # stock prediction API
+      - "6060:6060" # NLU API
+      - "6000:5432" # Postgres
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://warehouse-postgres:5432/warehouse
+      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/warehouse
       SPRING_DATASOURCE_USERNAME: warehouse_user
       SPRING_DATASOURCE_PASSWORD: warehouse_pass
-      PREDICT_ORDER_URL: http://stock-prediction-service:8000/predict/order
-      SUBSTITUTION_SERVICE_URL: http://substitution-service:8000/substitution/suggest
+      PREDICT_ORDER_URL: http://localhost:8100/predict/order
+      SUBSTITUTION_SERVICE_URL: http://localhost:8000/substitution/suggest
       SHORTAGE_SERVICE_URL: http://host.docker.internal:8083/shortage/proactive-call
-    networks:
-      - junction-net
-
-  substitution-service:
-    build: .
-    container_name: substitution-service
-    depends_on:
-      - warehouse-postgres
-    ports:
-      - "8000:8000"
-    environment:
-      WAREHOUSE_DB_HOST: warehouse-postgres
+      WAREHOUSE_DB_HOST: localhost
       WAREHOUSE_DB_PORT: 5432
       WAREHOUSE_DB_NAME: warehouse
       WAREHOUSE_DB_USER: warehouse_user
       WAREHOUSE_DB_PASSWORD: warehouse_pass
-    networks:
-      - junction-net
-
-  stock-prediction-service:
-    build:
-      context: ./stock_prediction
-    container_name: stock-prediction-service
-    ports:
-      - "8100:8000"
-    networks:
-      - junction-net
-
-  nlu-service:
-    build:
-      context: .
-      dockerfile: NLU/Dockerfile
-    container_name: nlu-service
-    ports:
-      - "6060:6060"
-    environment:
       NLU_HOST: 0.0.0.0
       NLU_PORT: 6060
-    networks:
-      - junction-net
-
-networks:
-  junction-net:
-    driver: bridge
-
-volumes:
-  warehouse-db-pgdata:
