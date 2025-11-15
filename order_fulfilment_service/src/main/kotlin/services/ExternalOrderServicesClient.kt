@@ -14,7 +14,7 @@ class ExternalOrderServicesClient(
     private val restTemplate: RestTemplate
 ) {
     private val predictOrderUrl = "http://localhost:8081/predict/order"
-    private val substitutionSuggestUrl = "http://localhost:8082/substitution/suggest"
+    private val substitutionSuggestUrl = "http://localhost:8000/substitution/suggest"
     private val shortageUrl = "http://localhost:8083/shortage/proactive-call"
 
     fun getItemsToReplace(order: ProductDto): PredictOrderResponse {
