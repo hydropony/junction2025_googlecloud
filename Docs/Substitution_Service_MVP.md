@@ -11,6 +11,7 @@ When an item in an order is unavailable, the substitution service suggests good,
 **Input:**
 - Original product SKU that is short or out of stock
 - Optional: order context (customer, quantities)
+- Optional: warehouse inventory snapshot (JSON) to constrain suggestions to in‑stock items at the site fulfilling the order
 
 **Output:**
 - Top N recommended replacement SKUs
@@ -76,14 +77,50 @@ For the MVP we stay in classic ML world, no external LLMs:
 4. Serve recommendations via a small API  
    - Trained model and feature data loaded into a FastAPI service  
    - Endpoint `POST /recommend` accepts `{ "sku": "...", "k": 3 }`  
-   - Service generates candidate pool (e.g., all SKUs in same category), scores with model, returns top‑k
+   - Service generates candidate pool (e.g., all SKUs in same category), applies warehouse availability filters when provided, scores with model, returns top‑k
+
+---
+
+## Model choice and MVP feature set (from data exploration)
+
+**Model (MVP):** GradientBoostingClassifier or RandomForestClassifier (scikit‑learn), trained on pairwise examples `(original_sku, candidate_sku) → label`. Calibrate probabilities if needed for ranking stability.
+
+**Primary features (catalog-driven, from product JSON):**
+- Category match: `original.category == candidate.category` (boolean)
+- Temperature proximity: absolute difference of `temperatureCondition` (bucketed 0, 1–3, >3)
+- Brand/vendor match: `brand` and/or `vendorName` equality flags
+- Pack/size ratio: ratio of key size fields (prefer `unitConversions.sizeInBaseUnits` at matching `unitId`; fallback to `allowedLotSize`)
+- Allergen/diet compatibility: overlap and contradictions between `classifications.allergen/nonAllergen` and `nutritionalClaim` (penalize conflicts, reward compatibility)
+- Name similarity: TF‑IDF similarity using multilingual `synkkaData.names[*].value` (concatenate available languages)
+
+Notes:
+- Use sales unit IDs (e.g., `ST`, `KI`, `RAS`, `SK`) to align size comparisons when present in both products’ `units.unitId`.
+- If a mapping from transactional `product_code` to catalog GTIN is partially missing, degrade gracefully by using only features available for both sides (skip size/allergen/brand features if not joinable).
+
+**Behavioral features (from replacement order history):**
+- Candidate popularity as a replacement: count/fraction of times candidate chosen overall
+- Conditional popularity: frequency candidate chosen for this original’s category
+- Recency weighting: emphasize recent replacements (time‑decayed counts, if timestamps available)
+
+**Operational features (optional MVP if joinable with sales/deliveries):**
+- Candidate fill‑rate proxy: recent delivered_qty/order_qty ratio by candidate
+- Supplier reliability proxy: if supplier/vendor grouping is available, recent shortage rate by supplier
+
+**Ranking:**
+- Score each candidate with the classifier’s probability of being chosen; return top‑k.
+- Tie‑break by higher name similarity and higher candidate popularity.
+- Apply a hard filter for availability: only candidates with available stock in the provided warehouse snapshot are considered (when the snapshot is supplied).
+
+**Evaluation:**
+- Hit@1 / Hit@3 on a held‑out slice of historical replacement pairs
+- MAP@k (optional), and calibration check (reliability curve) for ranking stability
 
 ---
 
 ## How it connects to the rest of the system
 
 - Prediction service flags an item as likely missing  
-- n8n calls the substitution service with the original SKU  
+- n8n calls the substitution service with the original SKU and, when possible, the warehouse inventory snapshot for the fulfillment site  
 - Substitution service returns a ranked list of replacements  
 - These replacements are used by the AI agent in phone/SMS: “We suggest X instead of Y, do you accept?”
 
@@ -110,6 +147,7 @@ Later, the same service can be used in the ecommerce frontend to show “similar
 - Incorporate richer product attributes from JSON (allergens, dietary flags, temperature class) as features
 - Replace/augment TF‑IDF with embedding‑based similarity once Featherless or another embedding provider is added
 - Add customer segment context: “this customer usually accepts house brand” or “prefers lactose free”
+- Add integration with live warehouse/inventory API and enforce availability‑only substitutions by site and cutoff times
 
 ---
 
