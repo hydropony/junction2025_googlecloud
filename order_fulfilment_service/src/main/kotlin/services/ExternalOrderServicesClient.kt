@@ -1,5 +1,6 @@
 package org.example.services
 
+import org.example.config.ExternalServicesProperties
 import org.example.dto.PredictOrderResponse
 import org.example.dto.ProductDto
 import org.example.dto.ShortageProactiveRequest
@@ -11,15 +12,12 @@ import org.springframework.web.client.RestTemplate
 
 @Component
 class ExternalOrderServicesClient(
-    private val restTemplate: RestTemplate
+    private val restTemplate: RestTemplate,
+    private val externalServicesProperties: ExternalServicesProperties
 ) {
-    private val predictOrderUrl = "http://localhost:8081/predict/order"
-    private val substitutionSuggestUrl = "http://localhost:8000/substitution/suggest"
-    private val shortageUrl = "http://localhost:8083/shortage/proactive-call"
-
     fun getItemsToReplace(order: ProductDto): PredictOrderResponse {
         return restTemplate.postForObject(
-            predictOrderUrl,
+            externalServicesProperties.predictOrderUrl,
             order,
             PredictOrderResponse::class.java
         ) ?: PredictOrderResponse(emptyList())
@@ -33,7 +31,7 @@ class ExternalOrderServicesClient(
         val request = SubstitutionRequest(lineId, productCode, qty)
 
         return restTemplate.postForObject(
-            substitutionSuggestUrl,
+            externalServicesProperties.substitutionSuggestUrl,
             request,
             SubstitutionResponse::class.java
         ) ?: SubstitutionResponse(lineId, emptyList())
@@ -41,7 +39,7 @@ class ExternalOrderServicesClient(
 
     fun getShortageDecisions(request: ShortageProactiveRequest): ShortageProactiveResponse {
         return restTemplate.postForObject(
-            shortageUrl,
+            externalServicesProperties.shortageUrl,
             request,
             ShortageProactiveResponse::class.java
         ) ?: ShortageProactiveResponse(emptyList())

@@ -22,12 +22,17 @@ services:
     container_name: order-fulfilment-service
     depends_on:
       - warehouse-postgres
+      - substitution-service
+      - stock-prediction-service
     ports:
       - "8080:8080"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://warehouse-postgres:5432/warehouse
       SPRING_DATASOURCE_USERNAME: warehouse_user
       SPRING_DATASOURCE_PASSWORD: warehouse_pass
+      PREDICT_ORDER_URL: http://stock-prediction-service:8000/predict/order
+      SUBSTITUTION_SERVICE_URL: http://substitution-service:8000/substitution/suggest
+      SHORTAGE_SERVICE_URL: http://host.docker.internal:8083/shortage/proactive-call
     networks:
       - junction-net
 

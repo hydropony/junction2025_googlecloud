@@ -66,6 +66,10 @@ class PredictionResponse(BaseModel):
     timestamp: str
 
 
+class PredictOrderLineIdsResponse(BaseModel):
+    lineIds: List[int]
+
+
 # ============================================================================
 # HEURISTIC LOGIC
 # ============================================================================
@@ -271,6 +275,17 @@ def predict_detailed(order: OrderRequest):
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
+
+
+@app.post("/predict/order", response_model=PredictOrderLineIdsResponse)
+def predict_order(order: OrderRequest) -> PredictOrderLineIdsResponse:
+    """
+    Returns the line IDs that are at risk (probability < 0.5) for compatibility
+    with the order fulfilment service.
+    """
+    detailed = predict_detailed(order)
+    risky_line_ids = [item.line_id for item in detailed.items if not item.in_stock]
+    return PredictOrderLineIdsResponse(lineIds=risky_line_ids)
 
 
 # ============================================================================
