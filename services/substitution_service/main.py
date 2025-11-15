@@ -15,6 +15,16 @@ class SuggestRequest(BaseModel):
         default=None,
         description="Optional order context (e.g., customer_id, quantity)",
     )
+    # Optional warehouse availability snapshot for filtering
+    availability: Optional[List[Dict[str, Any]]] = Field(
+        default=None,
+        description="Optional list of availability objects: {lineId:int, productCode:str, qty:float}",
+    )
+    # Optional required quantity for this order line; used when availability is provided
+    requiredQty: Optional[float] = Field(
+        default=None,
+        description="Requested quantity for original line; if provided, candidates require >= this qty in availability map",
+    )
 
 
 class Recommendation(BaseModel):
@@ -76,7 +86,28 @@ def _extract_display_name(prod: Dict[str, Any]) -> Optional[str]:
 @app.post("/substitution/suggest", response_model=SuggestResponse)
 def suggest_substitutions(request: SuggestRequest) -> SuggestResponse:
     # For MVP, treat sku as GTIN (salesUnitGtin or synkkaData.gtin)
-    orig, scored = suggest_candidates_by_gtin(request.sku, k=request.k)
+    # Build availability map if provided; assume productCode corresponds to candidate GTIN
+    avail_map: Optional[Dict[str, float]] = None
+    if request.availability:
+        tmp: Dict[str, float] = {}
+        for item in request.availability:
+            if not isinstance(item, dict):
+                continue
+            code = item.get("productCode")
+            qty = item.get("qty")
+            if isinstance(code, str) and isinstance(qty, (int, float)):
+                norm = _normalize_id(code) or code
+                # Keep max qty per code if duplicates
+                prev = tmp.get(norm)
+                tmp[norm] = float(max(qty, prev if prev is not None else 0.0))
+        avail_map = tmp if tmp else None
+
+    orig, scored = suggest_candidates_by_gtin(
+        request.sku,
+        k=request.k,
+        available_qty_by_code=avail_map,
+        required_qty=request.requiredQty,
+    )
     recs: List[Recommendation] = []
     for cand_gtin, score, cand in scored:
         recs.append(

@@ -130,15 +130,23 @@ def main() -> None:
     )
     print("[train] Fitting model")
     clf.fit(X_train, y_train)
-    proba = clf.predict_proba(X_test)[:, 1]
-    ap = average_precision_score(y_test, proba)
-    print(f"[train] Validation AP: {ap:.4f}")
+    proba_mat = clf.predict_proba(X_test)
+    # Handle cases where only a single class is present → proba has shape (n, 1)
+    if proba_mat.ndim == 2 and proba_mat.shape[1] > 1:
+        pos_proba = proba_mat[:, 1]
+    else:
+        pos_proba = proba_mat.ravel()
+    try:
+        ap = average_precision_score(y_test, pos_proba)
+    except Exception:
+        ap = float("nan")
+    print(f"[train] Validation AP: {ap if isinstance(ap, float) else float(ap):.4f}")
 
     artifact = {
         "model": clf,
         "feature_names": feature_names,
         "metadata": {
-            "average_precision": float(ap),
+            "average_precision": float(ap) if isinstance(ap, float) else float(ap),
             "samples": int(X.shape[0]),
         },
     }

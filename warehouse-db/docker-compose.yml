@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: warehouse-postgres
+    environment:
+      POSTGRES_DB: warehouse
+      POSTGRES_USER: warehouse_user
+      POSTGRES_PASSWORD: warehouse_pass
+    ports:
+      # Expose Postgres on localhost:6000 -> container:5432
+      - "6000:5432"
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
+
+

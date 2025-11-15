@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import math
 import pandas as pd
 
 from .features import compute_pair_features
 from .data_loaders import product_data_df
-from .model import load_default_model
+# Heuristic-only scorer (model intentionally not used for MVP)
 
 
 def _normalize_id(val: Any) -> Optional[str]:
@@ -59,6 +59,8 @@ def suggest_candidates_by_gtin(
     sku: str,
     k: int = 3,
     max_pool: int = 500,
+    available_qty_by_code: Optional[Dict[str, float]] = None,
+    required_qty: Optional[float] = None,
 ) -> Tuple[Dict[str, Any], List[Tuple[str, float, Dict[str, Any]]]]:
     """
     Returns:
@@ -85,8 +87,36 @@ def suggest_candidates_by_gtin(
         return r_gtin != orig_gtin
     pool = same_cat[same_cat.apply(not_same, axis=1)]
 
+    # If no availability map provided, attempt to resolve via callback from DB (optional, imported at API layer)
+    if available_qty_by_code is None:
+        try:
+            # Create the candidate list of GTINs to resolve availability for
+            cand_gtins: List[str] = []
+            for _, row in pool.iterrows():
+                cand = row.to_dict()
+                cg = _normalize_id(cand.get("salesUnitGtin")) or _normalize_id((cand.get("synkkaData") or {}).get("gtin"))
+                if cg:
+                    cand_gtins.append(cg)
+            # Lazy import to avoid hard dependency if DB not used
+            from .availability import get_availability_for_gtins  # type: ignore
+            available_qty_by_code = get_availability_for_gtins(cand_gtins)
+        except Exception:
+            available_qty_by_code = None
+
+    def _is_available(candidate_gtin: Optional[str]) -> bool:
+        if available_qty_by_code is None:
+            return True
+        if not candidate_gtin:
+            return False
+        qty_avail = available_qty_by_code.get(candidate_gtin)
+        if qty_avail is None:
+            return False
+        if required_qty is None:
+            return qty_avail > 0
+        return qty_avail >= float(required_qty)
+
     scored: List[Tuple[str, float, Dict[str, Any]]] = []
-    scorer = load_default_model()
+    scorer = None  # force heuristic-only scoring
     for _, row in pool.iterrows():
         cand = row.to_dict()
         feats = compute_pair_features(orig, cand)
@@ -105,7 +135,7 @@ def suggest_candidates_by_gtin(
                 + 0.5 * feats.get("popularity_by_category", 0.0)
             )
         cand_gtin = _normalize_id(cand.get("salesUnitGtin")) or _normalize_id((cand.get("synkkaData") or {}).get("gtin"))
-        if cand_gtin:
+        if cand_gtin and _is_available(cand_gtin):
             scored.append((cand_gtin, float(score), cand))
 
     # Sort and take top-k
