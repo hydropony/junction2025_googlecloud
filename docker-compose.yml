@@ -61,6 +61,19 @@ services:
     networks:
       - junction-net
 
+  nlu-service:
+    build:
+      context: .
+      dockerfile: NLU/Dockerfile
+    container_name: nlu-service
+    ports:
+      - "6060:6060"
+    environment:
+      NLU_HOST: 0.0.0.0
+      NLU_PORT: 6060
+    networks:
+      - junction-net
+
 networks:
   junction-net:
     driver: bridge
