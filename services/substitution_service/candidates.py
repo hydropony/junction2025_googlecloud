@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import math
 import pandas as pd
@@ -8,6 +8,23 @@ import pandas as pd
 from .features import compute_pair_features
 from .data_loaders import product_data_df
 # Heuristic-only scorer (model intentionally not used for MVP)
+
+
+def heuristic_score(feats: Dict[str, float]) -> float:
+    """
+    Heuristic scoring used when no trained model is applied.
+    Higher is better.
+    """
+    return (
+        1.5 * feats["name_jaccard"]
+        + 0.8 * feats["size_similarity"]
+        + 0.4 * feats["diet_compatible"]
+        + 0.3 * feats["vendor_match"]
+        - 1.0 * feats["allergen_conflict"]
+        - 0.05 * feats["temperature_abs_diff"]
+        + 0.3 * feats.get("popularity_overall", 0.0)
+        + 0.5 * feats.get("popularity_by_category", 0.0)
+    )
 
 
 def _normalize_id(val: Any) -> Optional[str]:
@@ -120,20 +137,8 @@ def suggest_candidates_by_gtin(
     for _, row in pool.iterrows():
         cand = row.to_dict()
         feats = compute_pair_features(orig, cand)
-        if scorer:
-            score = scorer.score(feats)
-        else:
-            # Heuristic weighted scoring fallback
-            score = (
-                1.5 * feats["name_jaccard"]
-                + 0.8 * feats["size_similarity"]
-                + 0.4 * feats["diet_compatible"]
-                + 0.3 * feats["vendor_match"]
-                - 1.0 * feats["allergen_conflict"]
-                - 0.05 * feats["temperature_abs_diff"]
-                + 0.3 * feats.get("popularity_overall", 0.0)
-                + 0.5 * feats.get("popularity_by_category", 0.0)
-            )
+        # Heuristic weighted scoring
+        score = heuristic_score(feats)
         cand_gtin = _normalize_id(cand.get("salesUnitGtin")) or _normalize_id((cand.get("synkkaData") or {}).get("gtin"))
         if cand_gtin and _is_available(cand_gtin):
             scored.append((cand_gtin, float(score), cand))

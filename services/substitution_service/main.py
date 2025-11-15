@@ -4,8 +4,8 @@ from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
 from .candidates import suggest_candidates_by_gtin
-from .data_loaders import product_data_df
 from .candidates import _normalize_id  # reuse normalization for response
+from .availability import get_line_ids_for_gtins
 
 
 class SuggestRequest(BaseModel):
@@ -37,6 +37,17 @@ class SuggestResponse(BaseModel):
     sku: str
     name: Optional[str] = None
     recommendations: List[Recommendation]
+
+
+class OrderSubstitutionRequest(BaseModel):
+    lineId: int
+    productCode: str
+    qty: float
+
+
+class OrderSubstitutionResponse(BaseModel):
+    lineId: int
+    suggestedLineIds: List[int]
 
 
 app = FastAPI(
@@ -83,8 +94,8 @@ def _extract_display_name(prod: Dict[str, Any]) -> Optional[str]:
     return None
 
 
-@app.post("/substitution/suggest", response_model=SuggestResponse)
-def suggest_substitutions(request: SuggestRequest) -> SuggestResponse:
+@app.post("/substitution/suggest_debug", response_model=SuggestResponse)
+def suggest_substitutions_debug(request: SuggestRequest) -> SuggestResponse:
     # For MVP, treat sku as GTIN (salesUnitGtin or synkkaData.gtin)
     # Build availability map if provided; assume productCode corresponds to candidate GTIN
     avail_map: Optional[Dict[str, float]] = None
@@ -121,6 +132,38 @@ def suggest_substitutions(request: SuggestRequest) -> SuggestResponse:
         sku=request.sku,
         name=_extract_display_name(orig) if isinstance(orig, dict) else None,
         recommendations=recs,
+    )
+
+
+@app.post("/substitution/suggest", response_model=OrderSubstitutionResponse)
+def suggest_substitutions(request: OrderSubstitutionRequest) -> OrderSubstitutionResponse:
+    """
+    Order-fulfilment facing API compatible with SubstitutionRequest/SubstitutionResponse:
+
+      Request:  { lineId, productCode, qty }
+      Response: { lineId, suggestedLineIds: [warehouse_items.line_id, ...] }
+    """
+    # Treat productCode as GTIN
+    sku = request.productCode
+    # Use DB-driven availability and requiredQty = requested qty
+    orig, scored = suggest_candidates_by_gtin(
+        sku,
+        k=3,
+        available_qty_by_code=None,
+        required_qty=request.qty,
+    )
+    # Map recommended GTINs to warehouse line_ids
+    gtins = [_normalize_id(g) or g for (g, _score, _cand) in scored]
+    code_to_line_id = get_line_ids_for_gtins(gtins)
+    suggested_ids: List[int] = []
+    for g, _score, _cand in scored:
+        code = _normalize_id(g) or g
+        line_id = code_to_line_id.get(code)
+        if line_id is not None:
+            suggested_ids.append(line_id)
+    return OrderSubstitutionResponse(
+        lineId=request.lineId,
+        suggestedLineIds=suggested_ids,
     )
 
 
