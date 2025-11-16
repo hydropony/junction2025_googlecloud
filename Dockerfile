@@ -58,6 +58,7 @@ COPY Docs ./Docs
 COPY analysis ./analysis
 COPY training ./training
 COPY models ./models
+COPY selected_product.json ./selected_product.json
 
 COPY --from=order_builder /tmp/order_fulfilment_service.jar /opt/order/order_fulfilment_service.jar
 COPY start-all.sh /app/start-all.sh
