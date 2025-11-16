@@ -12,7 +12,6 @@ PG_PORT="${PG_PORT:-5432}"
 
 SUBSTITUTION_PORT="${SUBSTITUTION_PORT:-8000}"
 STOCK_PREDICTION_PORT="${STOCK_PREDICTION_PORT:-8100}"
-NLU_PORT="${NLU_PORT:-6060}"
 ORDER_SERVICE_PORT="${PORT}"
 
 SHORTAGE_SERVICE_URL="${SHORTAGE_SERVICE_URL:-http://localhost:${ORDER_SERVICE_PORT}/api/orders/shortage/proactive-call}"
@@ -117,9 +116,6 @@ start_services() {
   start_process "Stock Prediction API (:${STOCK_PREDICTION_PORT})" \
     uvicorn stock_prediction.main:app --host 127.0.0.1 --port "${STOCK_PREDICTION_PORT}"
 
-  start_process "NLU API (:${NLU_PORT})" \
-    bash -c "cd /app/NLU && python -u app.py"
-  
 }
 
 main() {

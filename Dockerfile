@@ -46,15 +46,12 @@ RUN PG_MAJOR=$(ls /etc/postgresql | head -n 1) && \
 
 COPY requirements.txt requirements.txt
 COPY stock_prediction/requirements.txt stock_prediction/requirements.txt
-COPY NLU/requirements.txt NLU/requirements.txt
 
 RUN pip install --no-cache-dir -r requirements.txt \
-    && pip install --no-cache-dir -r stock_prediction/requirements.txt \
-    && pip install --no-cache-dir -r NLU/requirements.txt
+    && pip install --no-cache-dir -r stock_prediction/requirements.txt
 
 COPY services ./services
 COPY stock_prediction ./stock_prediction
-COPY NLU ./NLU
 COPY warehouse-db ./warehouse-db
 COPY Data ./Data
 COPY Docs ./Docs
@@ -66,7 +63,7 @@ COPY --from=order_builder /tmp/order_fulfilment_service.jar /opt/order/order_ful
 COPY start-all.sh /app/start-all.sh
 RUN chmod +x /app/start-all.sh
 
-EXPOSE 8000 8100 6060 5432
+EXPOSE 8000 8100 5432
 
 ENV WAREHOUSE_DB_HOST=localhost \
     WAREHOUSE_DB_PORT=5432 \
@@ -79,10 +76,9 @@ ENV WAREHOUSE_DB_HOST=localhost \
     PREDICT_ORDER_URL="http://localhost:8100/predict/order" \
     SUBSTITUTION_SERVICE_URL="http://localhost:8000/substitution/suggest" \
     SHORTAGE_SERVICE_URL="" \
-    NLU_HOST=0.0.0.0 \
-    NLU_PORT=6060 \
     SUBSTITUTION_PORT=8000 \
-    STOCK_PREDICTION_PORT=8100 
+    STOCK_PREDICTION_PORT=8100 \
+    JAVA_TOOL_OPTIONS="-Xms128m -Xmx256m"
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["/app/start-all.sh"]
