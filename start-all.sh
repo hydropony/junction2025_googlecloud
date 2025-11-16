@@ -96,6 +96,18 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL PRIVILEGES ON SEQUENCES TO $
 SQL
 }
 
+install_git_lfs() {
+  if command -v git-lfs >/dev/null 2>&1; then
+    log "git-lfs already installed"
+    return
+  fi
+
+  log "Installing git and git-lfs"
+  apt-get update >/dev/null
+  apt-get install -y --no-install-recommends git git-lfs >/dev/null
+  git lfs install >/dev/null
+}
+
 start_process() {
   local name="$1"
   shift
@@ -121,6 +133,7 @@ start_services() {
 main() {
   start_postgres
   ensure_database
+  install_git_lfs
   log "Seeding warehouse data (qty=500)"
   python3 analysis/seed_selected_products.py --qty 500 || {
     log "Seeding failed"
