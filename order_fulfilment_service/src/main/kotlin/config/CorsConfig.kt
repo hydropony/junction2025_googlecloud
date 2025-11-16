@@ -12,7 +12,9 @@ import org.springframework.web.filter.CorsFilter
 
 @Configuration
 class CorsConfig(
-    @Value("\${app.cors.allowed-origins:http://localhost:1234,http://127.0.0.1:1234,https://aimo-fresh-connect.lovable.app}")
+    @Value(
+        "\${app.cors.allowed-origins:http://localhost:1234,http://127.0.0.1:1234,https://aimo-fresh-connect.lovable.app,https://aimo-fresh-connect.lovable.app/checkout}"
+    )
     private val allowedOrigins: String
 ) {
     private val logger = LoggerFactory.getLogger(CorsConfig::class.java)
