@@ -74,7 +74,28 @@ class PredictOrderLineIdsResponse(BaseModel):
 # HEURISTIC LOGIC
 # ============================================================================
 
-def calculate_stock_probability(product_code: str, qty: float, unit: str, delivery_date: str) -> float:
+PERISHABLE_KEYWORDS = (
+    "lettuce",
+    "spinach",
+    "basil",
+    "herb",
+    "berry",
+    "salad",
+    "greens",
+)
+
+
+def _normalize_unit(unit: str) -> str:
+    return unit.upper().strip()
+
+
+def calculate_stock_probability(
+    product_code: str,
+    qty: float,
+    unit: str,
+    delivery_date: str,
+    item_name: Optional[str] = None,
+) -> float:
     """
     Calculate probability that item is in stock using heuristics.
     Uses deterministic randomness based on product code for consistency.
@@ -118,7 +139,24 @@ def calculate_stock_probability(product_code: str, qty: float, unit: str, delive
         'CS': -0.08,    # Cases more complex
         'PAK': -0.06,   # Packages
     }
-    base_probability += unit_adjustments.get(unit, -0.02)
+    normalized_unit = _normalize_unit(unit)
+    base_probability += unit_adjustments.get(normalized_unit, -0.02)
+
+    # Inject deterministic "historical shortage" penalty so some products are often risky
+    historical_signal = (seed_value % 100) / 100.0
+    if historical_signal < 0.15:
+        base_probability -= 0.35  # chronic shortage products
+    elif historical_signal < 0.30:
+        base_probability -= 0.20  # seasonal shortage
+    elif historical_signal < 0.50:
+        base_probability -= 0.10  # occasionally constrained
+
+    # Fresh greens and herbs spoil quickly -> extra penalty
+    name_for_risk = (item_name or "").lower()
+    if name_for_risk and any(keyword in name_for_risk for keyword in PERISHABLE_KEYWORDS):
+        base_probability -= 0.12
+
+    # Use provided name if available via closure by passing along
     
     # Parse delivery date and check urgency
     try:
@@ -197,7 +235,8 @@ def predict_stock_availability(order: OrderRequest):
                 product_code=item.product_code,
                 qty=item.qty,
                 unit=item.unit,
-                delivery_date=order.delivery_date
+                delivery_date=order.delivery_date,
+                item_name=item.name,
             )
             
             in_stock = probability >= 0.50  # 50% threshold
@@ -241,7 +280,8 @@ def predict_detailed(order: OrderRequest):
                 product_code=item.product_code,
                 qty=item.qty,
                 unit=item.unit,
-                delivery_date=order.delivery_date
+                delivery_date=order.delivery_date,
+                item_name=item.name,
             )
             
             in_stock = probability >= 0.50  # 50% threshold
