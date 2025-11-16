@@ -15,6 +15,9 @@ STOCK_PREDICTION_PORT="${STOCK_PREDICTION_PORT:-8100}"
 NLU_PORT="${NLU_PORT:-6060}"
 ORDER_SERVICE_PORT="${PORT:-10000}"
 
+SHORTAGE_SERVICE_URL="${SHORTAGE_SERVICE_URL:-http://localhost:${ORDER_SERVICE_PORT}/api/orders/shortage/proactive-call}"
+export SHORTAGE_SERVICE_URL
+
 PROC_PIDS=()
 PROC_NAMES=()
 
@@ -105,17 +108,18 @@ start_process() {
 }
 
 start_services() {
+  start_process "Order Fulfilment API (:${ORDER_SERVICE_PORT})" \
+    bash -c "cd /opt/order && java -jar order_fulfilment_service.jar --server.port=${ORDER_SERVICE_PORT}"
+
   start_process "Substitution API (:${SUBSTITUTION_PORT})" \
-    uvicorn services.substitution_service.main:app --host 0.0.0.0 --port "${SUBSTITUTION_PORT}"
+    uvicorn services.substitution_service.main:app --host 127.0.0.1 --port "${SUBSTITUTION_PORT}"
 
   start_process "Stock Prediction API (:${STOCK_PREDICTION_PORT})" \
-    uvicorn stock_prediction.main:app --host 0.0.0.0 --port "${STOCK_PREDICTION_PORT}"
+    uvicorn stock_prediction.main:app --host 127.0.0.1 --port "${STOCK_PREDICTION_PORT}"
 
   start_process "NLU API (:${NLU_PORT})" \
     bash -c "cd /app/NLU && python -u app.py"
-
-  start_process "Order Fulfilment API (:${ORDER_SERVICE_PORT})" \
-    bash -c "cd /opt/order && java -jar order_fulfilment_service.jar --server.port=${ORDER_SERVICE_PORT}"
+  
 }
 
 main() {
